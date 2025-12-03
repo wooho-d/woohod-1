@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IntePlan: 인테리어 공사 관리 대시보드</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Font Awesome for Icons (Unicode fallback used where possible, but CDN for UI elements) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Chosen Palette: Warm Neutrals & Sage Green -->
+    <!-- Application Structure Plan: 
+         1. Header: Project Context (Basic Info).
+         2. Analytics Dashboard: Visualizing the 'Scope of Work' derived from the checklist density.
+         3. Main Content Area: Tabbed interface separating 'Infrastructure (Main Plan)' from 'Finishes (Detail Plan)'.
+         4. Interactive Cards: Each sub-category (e.g., Electrical, Kitchen) is a card with specific checklist items.
+         5. Goal: To transform a flat text list into a dynamic project management view.
+    -->
+    <!-- Visualization & Content Choices:
+         1. Radar Chart: Goal -> Show 'Renovation Intensity' across 5 axes (Structural, Systems, Finishes, Kitchen/Bath, Furniture). Justification -> Helps quickly identify if the project is 'hard' (construction heavy) or 'soft' (decoration heavy).
+         2. Doughnut Chart: Goal -> Show task distribution. Justification -> visualizes where the most decisions need to be made.
+         3. Interactive Toggles: Goal -> Simulate project tracking. Justification -> Adds engagement to the static text.
+         4. Layout: Grid-based cards. Justification -> Better readability than a long table on mobile/desktop.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used (FontAwesome used via Link, Charts via Canvas). NO Mermaid JS used. -->
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f8f9fa; /* Light warm gray */
+            color: #333;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            height: 300px;
+            margin: 0 auto;
+        }
+        
+        .tab-active {
+            border-bottom: 2px solid #4a7c59; /* Sage Green */
+            color: #2f4f38;
+            font-weight: 700;
+        }
+
+        .tab-inactive {
+            color: #6b7280;
+        }
+        .tab-inactive:hover {
+            color: #4a7c59;
+        }
+    </style>
+</head>
+<body class="bg-stone-50 text-stone-800">
+
+    <!-- Top Navigation / Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-emerald-700 text-white p-2 rounded-lg">
+                    <i class="fas fa-home"></i>
+                </div>
+                <h1 class="text-xl font-bold tracking-tight text-stone-800">IntePlan <span class="font-light text-stone-500">| 프로젝트 매니저</span></h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm text-stone-500 hidden md:block" id="current-date"></span>
+                <button class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm">
+                    <i class="fas fa-save mr-2"></i> 저장하기
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Section 1: Project Overview (Context) -->
+        <!-- Introductory paragraph for Basic Info -->
+        <section class="mb-10 animate-fade-in-up">
+            <div class="mb-4">
+                <h2 class="text-2xl font-bold text-stone-800 flex items-center">
+                    <i class="fas fa-clipboard-list text-emerald-600 mr-2"></i> 1. 프로젝트 개요 (기본 정보)
+                </h2>
+                <p class="text-stone-600 mt-1 max-w-3xl">
+                    본 프로젝트의 기본 계약 정보 및 현장 현황을 요약합니다. 고객 상담 내역과 공사 예정 일정을 한눈에 파악하여 전체 프로젝트의 방향성을 설정하십시오.
+                </p>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Client Info -->
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-stone-400 uppercase">고객명</label>
+                        <div class="text-lg font-medium">홍길동 고객님 (예시)</div>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-stone-400 uppercase">현장 주소</label>
+                        <div class="text-lg font-medium">서울시 강남구 ...</div>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-stone-400 uppercase">평형 / TYPE</label>
+                        <div class="text-lg font-medium">32평형 / A-Type</div>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-stone-400 uppercase">공사 예정 기간</label>
+                        <div class="text-lg font-medium text-emerald-600">2023.11.01 ~ 11.30</div>
+                    </div>
+                    <!-- Secondary Info -->
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-stone-400 uppercase">상담 일자</label>
+                        <div class="text-stone-700">2023.10.15</div>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-stone-400 uppercase">연락처</label>
+                        <div class="text-stone-700">010-1234-5678</div>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-stone-400 uppercase">가견적</label>
+                        <div class="text-stone-700">45,000,000 원</div>
+                    </div>
+                     <div class="space-y-1">
+                        <label class="text-xs font-semibold text-stone-400 uppercase">현금영수증 번호</label>
+                        <div class="text-stone-700">미발행</div>
+                    </div>
+                </div>
+                <div class="mt-6 pt-6 border-t border-stone-100">
+                    <label class="text-xs font-semibold text-stone-400 uppercase">종합 메모</label>
+                    <p class="mt-2 text-stone-600 bg-stone-50 p-3 rounded-lg text-sm leading-relaxed">
+                        * 특이사항: 확장이 이미 되어 있는 세대임. 샷시 교체 필요 여부 재확인 요망.<br>
+                        * 고객 요청: 화이트 & 우드 컨셉 선호, 간접 조명 적극 활용 요청.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Dashboard Analytics -->
+        <!-- Analysis Context -->
+        <section class="mb-10">
+            <div class="mb-4 flex flex-col md:flex-row md:items-end justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-stone-800 flex items-center">
+                        <i class="fas fa-chart-pie text-emerald-600 mr-2"></i> 공사 범위 분석
+                    </h2>
+                    <p class="text-stone-600 mt-1">
+                        체크리스트 항목을 기반으로 분석된 공사 난이도와 공정 분포입니다. 프로젝트의 성격(구조 변경 중심 vs 마감 중심)을 시각적으로 확인하세요.
+                    </p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Radar Chart: Renovation Intensity -->
+                <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6 flex flex-col">
+                    <h3 class="text-lg font-bold text-stone-800 mb-2">공정별 집중도 (Intensity)</h3>
+                    <p class="text-sm text-stone-500 mb-4">각 영역별 체크리스트 항목 수를 기반으로 한 시공 밀도입니다.</p>
+                    <div class="flex-grow flex items-center justify-center bg-stone-50 rounded-lg p-4">
+                        <div class="chart-container">
+                            <canvas id="scopeRadarChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Doughnut Chart: Task Distribution -->
+                <div class="bg-white rounded-xl shadow-sm border border-stone-200 p-6 flex flex-col">
+                    <h3 class="text-lg font-bold text-stone-800 mb-2">세부 항목 분포</h3>
+                    <p class="text-sm text-stone-500 mb-4">Main Plan(설비/기본)과 Detail Plan(마감)의 의사결정 항목 비율입니다.</p>
+                    <div class="flex-grow flex items-center justify-center bg-stone-50 rounded-lg p-4">
+                         <div class="chart-container">
+                            <canvas id="taskDistributionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Interactive Checklist (Main & Detail Plan) -->
+        <!-- Interactive Context -->
+        <section class="mb-12">
+            <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-stone-800 flex items-center">
+                        <i class="fas fa-tasks text-emerald-600 mr-2"></i> 공정별 상세 계획 (Detail Plan)
+                    </h2>
+                    <p class="text-stone-600 mt-1">
+                        공사 단계별 세부 항목을 확인하고 관리합니다. 탭을 클릭하여 <strong>기본 공사(Main)</strong>와 <strong>마감 공사(Detail)</strong> 간을 전환하십시오.
+                    </p>
+                </div>
+                <!-- Navigation Tabs -->
+                <div class="mt-4 md:mt-0 flex space-x-2 bg-white p-1 rounded-lg border border-stone-200 shadow-sm">
+                    <button onclick="switchTab('main')" id="tab-main" class="px-4 py-2 rounded-md text-sm font-medium transition-all tab-active">
+                        2. MAIN PLAN (철거/설비)
+                    </button>
+                    <button onclick="switchTab('detail')" id="tab-detail" class="px-4 py-2 rounded-md text-sm font-medium transition-all tab-inactive">
+                        3. DETAIL PLAN (마감/가구)
+                    </button>
+                </div>
+            </div>
+
+            <!-- MAIN PLAN CONTENT -->
+            <div id="content-main" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-fade-in">
+                <!-- Cards will be injected by JS -->
+            </div>
+
+            <!-- DETAIL PLAN CONTENT -->
+            <div id="content-detail" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 hidden animate-fade-in">
+                <!-- Cards will be injected by JS -->
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-white border-t border-stone-200 mt-12 py-8">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-stone-500 text-sm">Interior Renovation Checklist Dashboard generated based on user report.</p>
+            <p class="text-stone-400 text-xs mt-2">&copy; 2023 Renovation Planner SPA</p>
+        </div>
+    </footer>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // Data Structure mirroring the Source Report
+        const renovationData = {
+            mainPlan: [
+                {
+                    title: "행위허가 및 확장",
+                    icon: "fa-file-signature",
+                    items: [
+                        { label: "행위허가 진행", options: ["유", "무"], value: "유" },
+                        { label: "확장 공사", type: "mixed", subtext: "개소", options: ["유", "무"], value: "거실, 입구방" },
+                        { label: "발코니 세라믹코트", type: "count", unit: "개소", value: 2 }
+                    ],
+                    memo: "확장 행위허가 처리 기간 약 2주 소요 예상"
+                },
+                {
+                    title: "철거 공사",
+                    icon: "fa-hammer",
+                    items: [
+                        { label: "천장몰딩 / 걸레받이", type: "check", value: true },
+                        { label: "아트월 / 벽 타일", type: "text", unit: "M", value: "전체 철거" },
+                        { label: "바닥 철거", options: ["장판", "강마루", "타일", "대리석"], value: "강마루" },
+                        { label: "천장 철거", options: ["공용부", "방", "전체"], value: "공용부" },
+                        { label: "가구/가벽 철거", type: "text", value: "싱크대, 신발장" },
+                        { label: "주방 철거", type: "check", value: true }
+                    ],
+                    memo: "소음 발생 심한 공정. 주민 동의서 필수."
+                },
+                {
+                    title: "설비 공사",
+                    icon: "fa-tools",
+                    items: [
+                        { label: "수도/배수 이설", type: "check", value: true },
+                        { label: "난방 분배기 이설", type: "check", value: false },
+                        { label: "방통/홈파기", type: "check", value: false },
+                        { label: "수도관 교체", type: "check", value: false }
+                    ],
+                    memo: "주방 수도 위치 변경 예정"
+                },
+                {
+                    title: "창호 (샷시)",
+                    icon: "fa-window-maximize",
+                    items: [
+                        { label: "이중창", type: "count", unit: "개", value: 3 },
+                        { label: "단창", type: "count", unit: "개", value: 2 },
+                        { label: "터닝도어", type: "count", unit: "개", value: 1 },
+                        { label: "폴딩도어", type: "count", unit: "짝", value: 0 }
+                    ],
+                    memo: "LG 슈퍼세이브5 적용 예정"
+                },
+                {
+                    title: "시스템 에어컨",
+                    icon: "fa-snowflake",
+                    items: [
+                        { label: "설치 대수", type: "count", unit: "대", value: 4 },
+                        { label: "단내림 공사", options: ["포함", "미포함"], value: "포함" },
+                        { label: "브랜드/타입", type: "text", value: "LG / 다배관" }
+                    ],
+                    memo: ""
+                },
+                {
+                    title: "전기 공사",
+                    icon: "fa-bolt",
+                    items: [
+                        { label: "매립등 (다운라이트)", type: "text", value: "3인치 30개" },
+                        { label: "간접등 (T5)", type: "text", unit: "M", value: "거실 우물, 커튼박스" },
+                        { label: "배선/차단기 교체", type: "check", value: true },
+                        { label: "스위치/콘센트 증설", type: "count", unit: "개", value: 5 },
+                        { label: "스위치 타입", options: ["국내형", "유럽형"], value: "유럽형(르그랑)" }
+                    ],
+                    memo: "식탁 펜던트 조명 위치 확정 필요"
+                }
+            ],
+            detailPlan: [
+                {
+                    title: "목공 공사",
+                    icon: "fa-tree",
+                    items: [
+                        { label: "도어 교체", type: "text", value: "문틀+도어 5세트" },
+                        { label: "히든/슬라이딩 도어", type: "count", value: 1 },
+                        { label: "문선 리폼", type: "text", value: "9mm 문선" },
+                        { label: "천장/벽체 신설", type: "check", value: true },
+                        { label: "아치 게이트", type: "count", value: 2 },
+                        { label: "조명 박스", type: "text", value: "라인조명 3M" }
+                    ],
+                    memo: "안방 드레스룸 입구 아치 형태 제작"
+                },
+                {
+                    title: "욕실 (거실/안방)",
+                    icon: "fa-bath",
+                    items: [
+                        { label: "타일 규격", type: "text", value: "600*600 포세린" },
+                        { label: "시공 방식", options: ["올철거", "덧방"], value: "올철거" },
+                        { label: "욕조/파티션", type: "text", value: "조적 욕조(안방), 파티션(거실)" },
+                        { label: "천장 마감", options: ["SMC", "이노솔", "도장"], value: "이노솔" },
+                        { label: "젠다이", options: ["신설", "연장"], value: "조적 젠다이 신설" },
+                        { label: "옵션", type: "text", value: "휴젠트 환풍기, 아메리칸스탠다드 도기" }
+                    ],
+                    memo: "욕실 2개소 동일 타일 적용"
+                },
+                {
+                    title: "도배/도장/마루",
+                    icon: "fa-paint-roller",
+                    items: [
+                        { label: "벽지 사양", type: "text", value: "LX 디아망" },
+                        { label: "도장 사양", type: "text", value: "-" },
+                        { label: "바닥재", options: ["강마루", "원목", "타일", "장판"], value: "광폭 강마루 (텍스쳐)" },
+                        { label: "필름 공사", type: "text", value: "샷시, 문틀, 현관문" }
+                    ],
+                    memo: "거실/주방 벽면은 페인트 질감 벽지 사용"
+                },
+                {
+                    title: "타일 (기타)",
+                    icon: "fa-border-all",
+                    items: [
+                        { label: "현관 바닥", type: "text", value: "600*1200" },
+                        { label: "발코니 바닥", type: "text", value: "300*300" },
+                        { label: "주방 벽", type: "text", value: "1200*600 (상판 말아올림)" }
+                    ],
+                    memo: ""
+                },
+                {
+                    title: "주방 가구",
+                    icon: "fa-utensils",
+                    items: [
+                        { label: "도어 사양", options: ["LPM", "PET", "도장"], value: "PET (무광 화이트)" },
+                        { label: "상판 사양", options: ["인조대리석", "칸스톤", "세라믹"], value: "칸스톤 (12T)" },
+                        { label: "구성", type: "text", value: "ㄷ자 아일랜드형 + 냉장고장" },
+                        { label: "기기", type: "text", value: "사각싱크볼, 거위목수전, 인덕션" }
+                    ],
+                    memo: "빌트인 콘센트 2개 매립"
+                },
+                {
+                    title: "일반 가구/기타",
+                    icon: "fa-couch",
+                    items: [
+                        { label: "신발장", type: "text", value: "띄움시공 + 간접등" },
+                        { label: "붙박이장", type: "text", value: "안방 12자" },
+                        { label: "중문", type: "text", value: "원슬라이딩 (철제/유리)" },
+                        { label: "기타", type: "text", value: "실링팬, 도어락 교체" }
+                    ],
+                    memo: ""
+                }
+            ]
+        };
+
+        // Initialize Application
+        document.addEventListener('DOMContentLoaded', () => {
+            renderDate();
+            renderCards('main');
+            renderCards('detail');
+            initCharts();
+        });
+
+        // 1. Render Current Date
+        function renderDate() {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+            document.getElementById('current-date').textContent = dateStr;
+        }
+
+        // 2. Tab Switching Logic
+        window.switchTab = function(tabName) {
+            const mainContent = document.getElementById('content-main');
+            const detailContent = document.getElementById('content-detail');
+            const mainTab = document.getElementById('tab-main');
+            const detailTab = document.getElementById('tab-detail');
+
+            if (tabName === 'main') {
+                mainContent.classList.remove('hidden');
+                detailContent.classList.add('hidden');
+                
+                mainTab.classList.add('tab-active', 'text-emerald-800');
+                mainTab.classList.remove('tab-inactive');
+                detailTab.classList.remove('tab-active', 'text-emerald-800');
+                detailTab.classList.add('tab-inactive');
+            } else {
+                mainContent.classList.add('hidden');
+                detailContent.classList.remove('hidden');
+
+                detailTab.classList.add('tab-active', 'text-emerald-800');
+                detailTab.classList.remove('tab-inactive');
+                mainTab.classList.remove('tab-active', 'text-emerald-800');
+                mainTab.classList.add('tab-inactive');
+            }
+        };
+
+        // 3. Render Cards Function
+        function renderCards(type) {
+            const container = document.getElementById(`content-${type}`);
+            const data = type === 'main' ? renovationData.mainPlan : renovationData.detailPlan;
+
+            data.forEach((section, index) => {
+                const card = document.createElement('div');
+                card.className = "bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden card-hover transition-all duration-300";
+                
+                // Header
+                let html = `
+                    <div class="bg-stone-50 px-5 py-4 border-b border-stone-100 flex justify-between items-center">
+                        <h3 class="font-bold text-stone-800 flex items-center">
+                            <i class="fas ${section.icon} text-stone-400 mr-2 w-6 text-center"></i>
+                            ${section.title}
+                        </h3>
+                        <span class="text-xs font-mono text-stone-400">#${type === 'main' ? 'MAIN' : 'DTL'}-${index + 1}</span>
+                    </div>
+                    <div class="p-5 space-y-4">
+                `;
+
+                // Items
+                section.items.forEach(item => {
+                    html += `<div class="flex flex-col sm:flex-row sm:items-center justify-between text-sm pb-2 border-b border-stone-50 last:border-0 last:pb-0">
+                                <span class="text-stone-500 mb-1 sm:mb-0">${item.label}</span>
+                                <div class="font-medium text-stone-800 bg-stone-50 px-2 py-1 rounded">
+                                    ${formatValue(item)}
+                                </div>
+                             </div>`;
+                });
+
+                // Memo
+                if (section.memo) {
+                    html += `
+                        <div class="mt-4 pt-3 border-t border-stone-100">
+                            <p class="text-xs text-stone-500 italic"><i class="fas fa-sticky-note mr-1 text-emerald-500"></i> ${section.memo}</p>
+                        </div>
+                    `;
+                }
+
+                html += `</div>`; // Close body
+                card.innerHTML = html;
+                container.appendChild(card);
+            });
+        }
+
+        // Helper to format values based on type
+        function formatValue(item) {
+            if (item.type === 'check') {
+                return item.value ? '<span class="text-emerald-600"><i class="fas fa-check-circle"></i> 포함</span>' : '<span class="text-stone-400">미포함</span>';
+            }
+            if (item.options && Array.isArray(item.options)) {
+                return `<span class="text-emerald-700">${item.value}</span>`;
+            }
+            if (item.unit) {
+                return `${item.value} ${item.unit}`;
+            }
+            return item.value || '-';
+        }
+
+        // 4. Chart Visualization Logic
+        function initCharts() {
+            // Calculate Item Counts for Radar Chart Data
+            // Structure: Demolition, Window, Extension
+            // Systems: Electric, HVAC, Plumbing
+            // Finishes: Paint, Wallpaper, Film
+            // Kitchen/Bath: Kitchen, Bath Tile
+            // Wood/Furn: Woodwork, Furniture
+            
+            // Simulating counts based on the array lengths provided in data
+            const scopeData = {
+                structure: renovationData.mainPlan[0].items.length + renovationData.mainPlan[1].items.length + renovationData.mainPlan[3].items.length, // Ext, Demo, Windows
+                systems: renovationData.mainPlan[2].items.length + renovationData.mainPlan[4].items.length + renovationData.mainPlan[5].items.length, // Plumbing, HVAC, Elec
+                woodwork: renovationData.detailPlan[0].items.length, // Wood
+                wetZone: renovationData.detailPlan[1].items.length + renovationData.detailPlan[3].items.length + renovationData.detailPlan[4].items.length, // Bath, Tile, Kitchen
+                finishes: renovationData.detailPlan[2].items.length + renovationData.detailPlan[5].items.length // Paint/Floor + Furniture
+            };
+
+            const ctxRadar = document.getElementById('scopeRadarChart').getContext('2d');
+            new Chart(ctxRadar, {
+                type: 'radar',
+                data: {
+                    labels: ['구조/창호', '설비/전기', '목공사', '주방/욕실', '마감/가구'],
+                    datasets: [{
+                        label: '공정 집중도 (Intensity)',
+                        data: [scopeData.structure, scopeData.systems, scopeData.woodwork, scopeData.wetZone, scopeData.finishes],
+                        fill: true,
+                        backgroundColor: 'rgba(74, 124, 89, 0.2)', // Sage Green transparent
+                        borderColor: '#4a7c59',
+                        pointBackgroundColor: '#4a7c59',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#4a7c59'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            angleLines: { color: '#e5e7eb' },
+                            grid: { color: '#e5e7eb' },
+                            pointLabels: {
+                                font: { size: 12, family: "'Noto Sans KR', sans-serif", weight: 'bold' },
+                                color: '#4b5563'
+                            },
+                            ticks: { display: false, backdropColor: 'transparent' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+
+            // Doughnut Chart for Main vs Detail count
+            const totalMainItems = renovationData.mainPlan.reduce((acc, section) => acc + section.items.length, 0);
+            const totalDetailItems = renovationData.detailPlan.reduce((acc, section) => acc + section.items.length, 0);
+
+            const ctxDoughnut = document.getElementById('taskDistributionChart').getContext('2d');
+            new Chart(ctxDoughnut, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Main Plan (기본)', 'Detail Plan (마감)'],
+                    datasets: [{
+                        data: [totalMainItems, totalDetailItems],
+                        backgroundColor: ['#d1fae5', '#34d399'], // Light Emerald, Emerald
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: { family: "'Noto Sans KR', sans-serif" },
+                                padding: 20,
+                                usePointStyle: true
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
